@@ -17,6 +17,7 @@ import prefect
 from prefect import Flow, Parameter, task
 from prefect.executors import LocalDaskExecutor
 
+
 def exception_handler(request, exception):
     """
     An exception handler for `grequests`
@@ -32,6 +33,9 @@ def chunk(arr, size=250):
 
 
 def collect_urls(filename):
+    """
+    Get the URLs from the file
+    """
     # read in the data
     df = pd.read_csv(filename,
                      usecols=['document_number', 'publication_date'],
@@ -42,7 +46,8 @@ def collect_urls(filename):
     # collect the urls
     urls = []
     for _, row in df.iterrows():
-        url = (f"https://www.govinfo.gov/content/pkg/FR-{row['publication_date']}"
+        url = (f"https://www.govinfo.gov/content/pkg/"
+               f"FR-{row['publication_date']}"
                f"/html/{row['document_number']}.htm")
         urls.append(url)
     return chunk(urls)
@@ -57,8 +62,8 @@ def get(urls):
 
     Parameters
     ----------
-    args : tuple of str
-        A tuple of start and end dates
+    urls : tuple of str
+        A list of URLs
     """
     rs = (grequests.get(u, timeout=2) for u in urls)
     resps = grequests.imap(rs, exception_handler=exception_handler)
@@ -71,13 +76,12 @@ def combine(resps):
     """
     Combine the results into a single list
     """
-    return list(chain.from_iterable(results))
+    return list(chain.from_iterable(resps))
 
 
 def main(filename, outfile):
 
-    print('start!')
-
+    # get all the URLs in chunks
     urls = collect_urls(filename)
 
     # set up the flow
@@ -86,12 +90,11 @@ def main(filename, outfile):
         rules = combine(texts)
 
     # run the flow with parallel threads in Dask
-    dask = LocalDaskExecutor(debug=True,
-                             scheduler="processes",
-                             num_workers=4)
+    # TODO: Change this to ``DaskExecutor```
+    dask = LocalDaskExecutor(scheduler="processes",
+                             num_workers=cpu_count())
     state = flow.run(executor=dask)
 
-    print('done!')
     # collect the results
     all_rules = state.result[rules].result
     df_all_rules = pd.DataFrame(all_rules)
