@@ -8,8 +8,8 @@ date :: 01-10-2021
 
 import argparse
 from datetime import timedelta
-from multiprocessing import cpu_count
 from itertools import chain
+from multiprocessing import cpu_count
 
 import grequests
 import pandas as pd
@@ -21,6 +21,7 @@ from prefect.executors import LocalDaskExecutor
 def exception_handler(request, exception):
     """
     An exception handler for `grequests`
+    TODO: Add exception handling?
     """
     pass
 
@@ -43,7 +44,7 @@ def collect_urls(filename):
            .drop_duplicates(subset='document_number', keep='first')\
            .reset_index(drop=True).copy()
 
-    # collect the urls
+    # collect the urls -- some of these won't work
     urls = []
     for _, row in df.iterrows():
         url = (f"https://www.govinfo.gov/content/pkg/"
@@ -53,7 +54,7 @@ def collect_urls(filename):
     return chunk(urls)
 
 
-@task(max_retries=1, timeout=1000, retry_delay=timedelta(seconds=1))
+@task(max_retries=1, timeout=300, retry_delay=timedelta(seconds=1))
 def get(urls):
     """
     The main task, submitting a request to get
@@ -65,7 +66,7 @@ def get(urls):
     urls : tuple of str
         A list of URLs
     """
-    rs = (grequests.get(u, timeout=2) for u in urls)
+    rs = (grequests.get(u, timeout=1) for u in urls)
     resps = grequests.imap(rs, exception_handler=exception_handler)
     resps = [(r.text, url) if r and r.ok else (None, url)
              for url, r in zip(urls, resps)]
@@ -80,6 +81,9 @@ def combine(resps):
 
 
 def main(filename, outfile):
+    """
+    Run the process
+    """
 
     # get all the URLs in chunks
     urls = collect_urls(filename)

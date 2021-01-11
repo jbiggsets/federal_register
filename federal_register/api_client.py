@@ -10,6 +10,7 @@ import argparse
 import requests
 from datetime import timedelta
 from itertools import chain
+from multiprocessing import cpu_count
 
 import pandas as pd
 import prefect
@@ -113,9 +114,10 @@ def main(output_file, start_date, end_date, n_threads=3):
         rule = get.map(urls)
         rules = combine(rule)
 
-    # run the flow with parallel threads in Dask
-    dask = DaskExecutor(cluster_kwargs={'n_workers': 1,
-                                        'threads_per_worker': n_threads})
+    # run the flow with parallel processes in Dask
+    # TODO: Change this to ``DaskExecutor```
+    dask = LocalDaskExecutor(scheduler="processes",
+                             num_workers=cpu_count())
     state = flow.run(executor=dask)
 
     # collect the results
